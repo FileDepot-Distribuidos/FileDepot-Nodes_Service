@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package filesystem;
+
+option go_package = "proto/filesystem";
+
+// Servicio para operaciones del sistema de archivos
+service FileSystemService {
+  rpc UploadFile (UploadRequest) returns (Response);
+  rpc CreateDirectory (DirectoryRequest) returns (Response);
+  rpc CreateSubdirectory (SubdirectoryRequest) returns (Response);
+  rpc RenameFile (RenameRequest) returns (Response);
+  rpc DeleteFile (DeleteRequest) returns (Response);
+  rpc ListFiles (DirectoryRequest) returns (ListResponse);
+  rpc MoveFile (MoveRequest) returns (Response);
+}
+
+// Servicio para el registro y estado de los nodos
+service NodeService {
+  rpc RegisterNode (NodeInfo) returns (Response);
+  rpc ReportStatus (NodeStatus) returns (Response);
+}
+
+// Mensajes para operaciones del sistema de archivos
+message UploadRequest {
+  string filename = 1;
+  string directory = 2;  // Puede estar vacío
+  bytes content = 3;
+}
+
+message DirectoryRequest {
+  string path = 1;
+}
+
+message SubdirectoryRequest {
+  string parent_directory = 1;
+  string subdirectory_name = 2;
+}
+
+message RenameRequest {
+  string old_name = 1;
+  string new_name = 2;
+}
+
+message DeleteRequest {
+  string path = 1;
+}
+
+message MoveRequest {
+  string source_path = 1;
+  string destination_path = 2;
+}
+
+message Response {
+  string message = 1;
+}
+
+message ListResponse {
+  repeated string files = 1;
+}
+
+// Mensajes para el registro y estado de los nodos
+message NodeInfo {
+  string address = 1; // Dirección del nodo (por ejemplo, "ip:puerto")
+  string status = 2;  // Estado inicial (por ejemplo, "activo")
+}
+
+message NodeStatus {
+  string address = 1; 
+  string status = 2;  
+}
