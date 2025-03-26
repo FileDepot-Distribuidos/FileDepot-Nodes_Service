@@ -164,7 +164,6 @@ func (s *Server) RenameFile(ctx context.Context, req *pb.RenameRequest) (*pb.Res
 func (s *Server) DeleteFile(ctx context.Context, req *pb.DeleteRequest) (*pb.Response, error) {
 	targetPath := filepath.Join(rootDirectory, req.Path)
 
-	// Verificar si el archivo/directorio existe
 	info, err := os.Stat(targetPath)
 	if os.IsNotExist(err) {
 		return &pb.Response{Message: "El archivo/directorio no existe"}, nil
@@ -205,7 +204,7 @@ func (s *Server) ListFiles(ctx context.Context, req *pb.DirectoryRequest) (*pb.L
 	return &pb.ListResponse{Files: filenames}, nil
 }
 
-// NewServer crea una nueva instancia del servidor gRPC
+// Instancia de server
 func NewServer() *Server {
 	return &Server{}
 }
