@@ -16,3 +16,6 @@ protoc -I=proto --go_out=. --go-grpc_out=. proto/fileSystem.proto
 Esto, para que funcione la interfaz grpc
 
 
+CORRER SERVER
+go run grpcServer/gRPCserver.go
+go get github.com/joho/godotenv

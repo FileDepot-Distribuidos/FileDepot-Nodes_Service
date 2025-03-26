@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	pb "filesystem/proto/filesystem"
 
@@ -22,14 +23,27 @@ func main() {
 
 	client := pb.NewFileSystemServiceClient(conn)
 
-	// Ejecutar pruebas
+	// Ejecutar pruebas con pausas entre ellas
 	testUploadFile(client, "file1.txt")
+	time.Sleep(1 * time.Second)
+
 	testUploadFile(client, "file2.txt")
+	time.Sleep(1 * time.Second)
+
 	testRenameFile(client, "file1.txt", "file1_renamed.txt")
+	time.Sleep(1 * time.Second)
+
 	testDeleteFile(client, "file2.txt")
+	time.Sleep(1 * time.Second)
+
 	testCreateDirectory(client)
+	time.Sleep(1 * time.Second)
+
 	testMoveFile(client)
+	time.Sleep(1 * time.Second)
+
 	testListFiles(client)
+	time.Sleep(1 * time.Second)
 }
 
 // Subir un archivo
