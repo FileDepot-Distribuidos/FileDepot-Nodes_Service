@@ -1,17 +1,13 @@
-package main
+package server
 
 import (
 	"context"
-	"log"
-	"net"
 	"os"
+
 	"path/filepath"
-	"runtime"
 
 	pb "filesystem/proto/filesystem"
 
-	"github.com/joho/godotenv"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -209,33 +205,7 @@ func (s *Server) ListFiles(ctx context.Context, req *pb.DirectoryRequest) (*pb.L
 	return &pb.ListResponse{Files: filenames}, nil
 }
 
-// Inicia el servidor gRPC
-func main() {
-
-	// Cargar el archivo .env
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatalf("Error cargando el archivo .env: %v", err)
-	}
-
-	// Obtener el puerto desde las variables de entorno
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "50051" // Valor por defecto
-	}
-	// Limitar hilos
-	runtime.GOMAXPROCS(4)
-
-	listener, err := net.Listen("tcp", ":"+port)
-	if err != nil {
-		log.Fatalf("Error al iniciar el servidor: %v", err)
-	}
-
-	grpcServer := grpc.NewServer()
-	pb.RegisterFileSystemServiceServer(grpcServer, &Server{})
-
-	log.Println("Servidor gRPC escuchando en :50051")
-	if err := grpcServer.Serve(listener); err != nil {
-		log.Fatalf("Error al iniciar el servidor: %v", err)
-	}
+// NewServer crea una nueva instancia del servidor gRPC
+func NewServer() *Server {
+	return &Server{}
 }
