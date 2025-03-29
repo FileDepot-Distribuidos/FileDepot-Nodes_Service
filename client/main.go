@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"time"
@@ -11,129 +12,107 @@ import (
 	"google.golang.org/grpc"
 )
 
-const serverAddr = "localhost:50051"
+const serverAddress = "localhost:50051"
 
 func main() {
 	// Conectar con el servidor gRPC
-	conn, err := grpc.Dial(serverAddr, grpc.WithInsecure())
+	conn, err := grpc.Dial("127.0.0.1:50051", grpc.WithInsecure())
+
 	if err != nil {
-		log.Fatalf("Error conectando al servidor: %v", err)
+		log.Fatalf("No se pudo conectar: %v", err)
 	}
 	defer conn.Close()
 
 	client := pb.NewFileSystemServiceClient(conn)
+	time.Sleep(2 * time.Second)
+	// Subir archivos
+	uploadFile(client, "file1.txt", "Contenido del archivo 1")
+	uploadFile(client, "file2.txt", "Contenido del archivo 2")
+	uploadFile(client, "file3.txt", "Contenido del archivo 3")
 
-	// Ejecutar pruebas con pausas entre ellas
-	testUploadFile(client, "file1.txt")
-	time.Sleep(1 * time.Second)
+	// Crear directorio y subdirectorio
+	createDirectory(client, "newdir")
+	createSubdirectory(client, "newdir", "subdir")
 
-	testUploadFile(client, "file2.txt")
-	time.Sleep(1 * time.Second)
+	// Eliminar un archivo
+	deleteFile(client, "file1.txt")
 
-	testRenameFile(client, "file1.txt", "file1_renamed.txt")
-	time.Sleep(1 * time.Second)
+	// Renombrar y mover un archivo
+	renameAndMoveFile(client, "file2.txt", "newdir/renamed.txt")
 
-	testDeleteFile(client, "file2.txt")
-	time.Sleep(1 * time.Second)
+	// Mover un archivo a un subdirectorio
+	moveFile(client, "file3.txt", "newdir/subdir/file3.txt")
+}
 
-	testCreateDirectory(client)
-	time.Sleep(1 * time.Second)
-
-	testMoveFile(client)
-	time.Sleep(1 * time.Second)
-
-	testListFiles(client)
+func uploadFile(client pb.FileSystemServiceClient, filename, content string) {
+	encodedContent := base64.StdEncoding.EncodeToString([]byte(content))
+	res, err := client.UploadFile(context.Background(), &pb.UploadRequest{
+		Filename:      filename,
+		ContentBase64: encodedContent,
+	})
+	if err != nil {
+		log.Printf("Error subiendo archivo %s: %v", filename, err)
+	} else {
+		fmt.Printf("Subido: %s -> %s\n", filename, res.Message)
+	}
 	time.Sleep(1 * time.Second)
 }
 
-// Subir un archivo
-func testUploadFile(client pb.FileSystemServiceClient, filename string) {
-	fmt.Printf("=== Prueba: Subir archivo %s ===\n", filename)
-
-	fileContent := []byte("Contenido de prueba")
-	req := &pb.UploadRequest{
-		Filename:  filename,
-		Content:   fileContent,
-		Directory: "", // Opcional: especificar un subdirectorio
-	}
-
-	res, err := client.UploadFile(context.Background(), req)
+func createDirectory(client pb.FileSystemServiceClient, path string) {
+	res, err := client.CreateDirectory(context.Background(), &pb.DirectoryRequest{Path: path})
 	if err != nil {
-		log.Printf("Error al subir archivo %s: %v\n", filename, err)
+		log.Printf("Error creando directorio %s: %v", path, err)
 	} else {
 		fmt.Println(res.Message)
 	}
+	time.Sleep(1 * time.Second)
 }
 
-// Crear un directorio
-func testCreateDirectory(client pb.FileSystemServiceClient) {
-	fmt.Println("=== Prueba: Crear directorio ===")
-
-	req := &pb.DirectoryRequest{Path: "test_dir"}
-	res, err := client.CreateDirectory(context.Background(), req)
+func createSubdirectory(client pb.FileSystemServiceClient, parent, subdir string) {
+	res, err := client.CreateSubdirectory(context.Background(), &pb.SubdirectoryRequest{
+		ParentDirectory:  parent,
+		SubdirectoryName: subdir,
+	})
 	if err != nil {
-		log.Printf("Error al crear directorio: %v\n", err)
+		log.Printf("Error creando subdirectorio %s: %v", subdir, err)
 	} else {
 		fmt.Println(res.Message)
 	}
+	time.Sleep(1 * time.Second)
 }
 
-// Mover un archivo
-func testMoveFile(client pb.FileSystemServiceClient) {
-	fmt.Println("=== Prueba: Mover archivo ===")
-
-	req := &pb.MoveRequest{
-		SourcePath:      "storage/file1_renamed.txt",
-		DestinationPath: "storage/test_dir/file1_renamed.txt",
-	}
-
-	res, err := client.MoveFile(context.Background(), req)
+func deleteFile(client pb.FileSystemServiceClient, path string) {
+	res, err := client.DeleteFile(context.Background(), &pb.DeleteRequest{Path: path})
 	if err != nil {
-		log.Printf("Error al mover archivo: %v\n", err)
+		log.Printf("Error eliminando archivo %s: %v", path, err)
 	} else {
 		fmt.Println(res.Message)
 	}
+	time.Sleep(1 * time.Second)
 }
 
-// Renombrar un archivo
-func testRenameFile(client pb.FileSystemServiceClient, oldName, newName string) {
-	fmt.Printf("=== Prueba: Renombrar archivo %s a %s ===\n", oldName, newName)
-
-	req := &pb.RenameRequest{
-		OldName: oldName,
-		NewName: newName,
-	}
-
-	res, err := client.RenameFile(context.Background(), req)
+func renameAndMoveFile(client pb.FileSystemServiceClient, oldPath, newPath string) {
+	res, err := client.RenameFile(context.Background(), &pb.RenameRequest{
+		OldName: oldPath,
+		NewName: newPath,
+	})
 	if err != nil {
-		log.Printf("Error al renombrar archivo: %v\n", err)
+		log.Printf("Error renombrando/moviendo archivo %s: %v", oldPath, err)
 	} else {
 		fmt.Println(res.Message)
 	}
+	time.Sleep(1 * time.Second)
 }
 
-// Eliminar un archivo
-func testDeleteFile(client pb.FileSystemServiceClient, filename string) {
-	fmt.Printf("=== Prueba: Eliminar archivo %s ===\n", filename)
-
-	req := &pb.DeleteRequest{Path: filename}
-	res, err := client.DeleteFile(context.Background(), req)
+func moveFile(client pb.FileSystemServiceClient, source, destination string) {
+	res, err := client.MoveFile(context.Background(), &pb.MoveRequest{
+		SourcePath:      source,
+		DestinationPath: destination,
+	})
 	if err != nil {
-		log.Printf("Error al eliminar archivo %s: %v\n", filename, err)
+		log.Printf("Error moviendo archivo %s: %v", source, err)
 	} else {
 		fmt.Println(res.Message)
 	}
-}
-
-// Listar archivos en un directorio
-func testListFiles(client pb.FileSystemServiceClient) {
-	fmt.Println("=== Prueba: Listar archivos ===")
-
-	req := &pb.DirectoryRequest{Path: "test_dir"}
-	res, err := client.ListFiles(context.Background(), req)
-	if err != nil {
-		log.Printf("Error al listar archivos: %v\n", err)
-	} else {
-		fmt.Println("Archivos en test_dir:", res.Files)
-	}
+	time.Sleep(1 * time.Second)
 }

@@ -2,8 +2,8 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"os"
-
 	"path/filepath"
 
 	pb "filesystem/proto/filesystem"
@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// Archivo raíz (el default del user)
+// Acá se marca la ruta dentro de la vm donde se ejecuta de donde se guardará cada archivo.
 const rootDirectory = "storage"
 
 type Server struct {
@@ -67,16 +67,23 @@ type Server struct {
 // 	}
 // }
 
-// Subir archivo
+// Subir archivo en Base64
 func (s *Server) UploadFile(ctx context.Context, req *pb.UploadRequest) (*pb.Response, error) {
 	filename := req.Filename
-	data := req.Content
+	base64Data := req.ContentBase64
 
-	// Verificar que no esté vacío
+	// Verificar que el nombre no esté vacío
 	if filename == "" {
 		return &pb.Response{Message: "El nombre del archivo no puede estar vacío"}, nil
 	}
 
+	// Decodificar Base64 a bytes
+	data, err := base64.StdEncoding.DecodeString(base64Data)
+	if err != nil {
+		return &pb.Response{Message: "Error decodificando Base64"}, err
+	}
+
+	// Crear directorios si no existen
 	if err := os.MkdirAll(rootDirectory, os.ModePerm); err != nil {
 		return &pb.Response{Message: "Error creando directorio raíz"}, err
 	}
@@ -90,29 +97,39 @@ func (s *Server) UploadFile(ctx context.Context, req *pb.UploadRequest) (*pb.Res
 		filePath = filepath.Join(fullDir, filename)
 	}
 
-	err := os.WriteFile(filePath, data, 0644)
+	// Guardar archivo en disco
+	err = os.WriteFile(filePath, data, 0644)
 	if err != nil {
 		return &pb.Response{Message: "Error escribiendo archivo"}, err
 	}
 
-	return &pb.Response{Message: "Archivo subido correctamente a " + filePath}, nil
+	// Leer el archivo guardado y convertirlo a Base64
+	savedData, err := os.ReadFile(filePath)
+	if err != nil {
+		return &pb.Response{Message: "Error leyendo archivo guardado"}, err
+	}
+	encodedData := base64.StdEncoding.EncodeToString(savedData)
+
+	// Responder con el Base64 del archivo guardado
+	return &pb.Response{
+		Message:    "Archivo subido correctamente",
+		FileBase64: encodedData,
+	}, nil
 }
 
 // Mover un archivo
 func (s *Server) MoveFile(ctx context.Context, req *pb.MoveRequest) (*pb.Response, error) {
-	sourcePath := req.SourcePath
-	destinationPath := req.DestinationPath
+	sourcePath := filepath.Join(rootDirectory, req.SourcePath)
+	destPath := filepath.Join(rootDirectory, req.DestinationPath)
 
-	if _, err := os.Stat(req.SourcePath); os.IsNotExist(err) {
-		return nil, status.Errorf(codes.NotFound, "El archivo '%s' no existe en el servidor", req.SourcePath)
+	if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
+		return nil, status.Errorf(codes.NotFound, "El archivo fuente no existe")
 	}
 
-	// Mover el archivo o directorio
-	err := os.Rename(sourcePath, destinationPath)
-	if err != nil {
-		return &pb.Response{Message: "Error moviendo archivo/directorio"}, err
+	if err := os.Rename(sourcePath, destPath); err != nil {
+		return nil, status.Errorf(codes.Internal, "Error al mover archivo: %v", err)
 	}
-	return &pb.Response{Message: "Archivo/Directorio movido correctamente"}, nil
+	return &pb.Response{Message: "Archivo movido con éxito"}, nil
 }
 
 // Crear un nuevo directorio
@@ -129,7 +146,7 @@ func (s *Server) CreateDirectory(ctx context.Context, req *pb.DirectoryRequest) 
 	return &pb.Response{Message: "Directorio creado correctamente"}, nil
 }
 
-// Crea un subdirectorio dentro de otro directorio
+// Crea un subdirectorio
 func (s *Server) CreateSubdirectory(ctx context.Context, req *pb.SubdirectoryRequest) (*pb.Response, error) {
 	if req.ParentDirectory == "" || req.SubdirectoryName == "" {
 		return &pb.Response{Message: "El nombre del directorio padre y del subdirectorio no pueden estar vacíos"}, nil
@@ -148,16 +165,14 @@ func (s *Server) RenameFile(ctx context.Context, req *pb.RenameRequest) (*pb.Res
 	oldPath := filepath.Join(rootDirectory, req.OldName)
 	newPath := filepath.Join(rootDirectory, req.NewName)
 
-	// Verificar si el archivo/directorio existe antes de renombrar
 	if _, err := os.Stat(oldPath); os.IsNotExist(err) {
-		return &pb.Response{Message: "El archivo/directorio no existe"}, nil
+		return nil, status.Errorf(codes.NotFound, "El archivo a renombrar no existe")
 	}
 
-	err := os.Rename(oldPath, newPath)
-	if err != nil {
-		return &pb.Response{Message: "Error renombrando archivo/directorio"}, err
+	if err := os.Rename(oldPath, newPath); err != nil {
+		return nil, status.Errorf(codes.Internal, "Error al renombrar archivo: %v", err)
 	}
-	return &pb.Response{Message: "Archivo/Directorio renombrado correctamente"}, nil
+	return &pb.Response{Message: "Archivo renombrado con éxito"}, nil
 }
 
 // Elimina un archivo o directorio

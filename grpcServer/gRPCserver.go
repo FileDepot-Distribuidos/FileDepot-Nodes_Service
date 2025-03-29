@@ -50,7 +50,6 @@ func main() {
 	}
 
 	// Configurar interceptor para el servidor gRPC
-	//El handler es el que se encarga de manejar la petición o buscar la función qde lo que se necesita
 	unaryInterceptor := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		var result interface{}
 		var err error
@@ -73,14 +72,26 @@ func main() {
 	fileSystemServer := server.NewServer()
 	pb.RegisterFileSystemServiceServer(grpcServer, fileSystemServer)
 
-	lis, err := net.Listen("tcp", ":"+port)
+	lis, err := net.Listen("tcp", "127.0.0.1:"+port)
 	if err != nil {
 		log.Fatalf("Error al escuchar en el puerto %s: %v", port, err)
 	}
 
 	log.Printf("Servidor gRPC corriendo en el puerto %s...\n", port)
 
-	// Iniciar el servidor
+	// Iniciar el servidor y registrar conexiones
+	go func() {
+		for {
+			conn, err := lis.Accept()
+			if err != nil {
+				log.Printf("Error aceptando conexión: %v", err)
+				continue
+			}
+			log.Printf("Nueva conexión desde: %s", conn.RemoteAddr().String())
+			conn.Close()
+		}
+	}()
+
 	go func() {
 		if err := grpcServer.Serve(lis); err != nil {
 			log.Fatalf("Error al iniciar el servidor gRPC: %v", err)
