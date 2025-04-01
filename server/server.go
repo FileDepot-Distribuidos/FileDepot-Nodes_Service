@@ -219,6 +219,48 @@ func (s *Server) ListFiles(ctx context.Context, req *pb.DirectoryRequest) (*pb.L
 	return &pb.ListResponse{Files: filenames}, nil
 }
 
+func (s *Server) ListDirectories(ctx context.Context, req *pb.DirectoryRequest) (*pb.ListResponse, error) {
+	fullPath := filepath.Join(rootDirectory, req.Path)
+
+	entries, err := os.ReadDir(fullPath)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "No se pudo leer el directorio: %v", err)
+	}
+
+	var directories []string
+	for _, entry := range entries {
+		if entry.IsDir() { // Solo directorios
+			directories = append(directories, entry.Name())
+		}
+	}
+
+	return &pb.ListResponse{Files: directories}, nil
+}
+
+func (s *Server) ListAll(ctx context.Context, req *pb.DirectoryRequest) (*pb.ListAllResponse, error) {
+	fullPath := filepath.Join(rootDirectory, req.Path)
+
+	entries, err := os.ReadDir(fullPath)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "No se pudo leer el directorio: %v", err)
+	}
+
+	var files []string
+	var directories []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			directories = append(directories, entry.Name())
+		} else {
+			files = append(files, entry.Name())
+		}
+	}
+
+	return &pb.ListAllResponse{
+		Files:       files,
+		Directories: directories,
+	}, nil
+}
+
 // Instancia de server
 func NewServer() *Server {
 	return &Server{}

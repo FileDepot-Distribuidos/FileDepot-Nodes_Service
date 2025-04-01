@@ -25,6 +25,7 @@ func main() {
 
 	client := pb.NewFileSystemServiceClient(conn)
 	time.Sleep(2 * time.Second)
+
 	// Subir archivos
 	uploadFile(client, "file1.txt", "Contenido del archivo 1")
 	uploadFile(client, "file2.txt", "Contenido del archivo 2")
@@ -34,6 +35,9 @@ func main() {
 	createDirectory(client, "newdir")
 	createSubdirectory(client, "newdir", "subdir")
 
+	// Listar archivos y carpetas
+	listAll(client, "newdir")
+
 	// Eliminar un archivo
 	deleteFile(client, "file1.txt")
 
@@ -42,6 +46,9 @@ func main() {
 
 	// Mover un archivo a un subdirectorio
 	moveFile(client, "file3.txt", "newdir/subdir/file3.txt")
+
+	// Volver a listar para ver cambios
+	listAll(client, "newdir")
 }
 
 func uploadFile(client pb.FileSystemServiceClient, filename, content string) {
@@ -114,5 +121,25 @@ func moveFile(client pb.FileSystemServiceClient, source, destination string) {
 	} else {
 		fmt.Println(res.Message)
 	}
+	time.Sleep(1 * time.Second)
+}
+
+// Función para listar archivos y directorios en un path
+func listAll(client pb.FileSystemServiceClient, path string) {
+	res, err := client.ListFiles(context.Background(), &pb.DirectoryRequest{Path: path})
+	if err != nil {
+		log.Printf("Error listando contenido en %s: %v", path, err)
+		return
+	}
+
+	fmt.Printf("\n📂 Contenido de '%s':\n", path)
+	if len(res.Files) > 0 {
+		for _, item := range res.Files {
+			fmt.Println("", item)
+		}
+	} else {
+		fmt.Println("   (Vacío)")
+	}
+	fmt.Println()
 	time.Sleep(1 * time.Second)
 }

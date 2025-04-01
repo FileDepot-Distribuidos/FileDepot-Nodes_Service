@@ -13,6 +13,7 @@ service FileSystemService {
   rpc DeleteFile (DeleteRequest) returns (Response);
   rpc ListFiles (DirectoryRequest) returns (ListResponse);
   rpc MoveFile (MoveRequest) returns (Response);
+  rpc ListAll (DirectoryRequest) returns (ListAllResponse);
 }
 
 // Servicio para el registro y estado de los nodos
@@ -61,6 +62,10 @@ message ListResponse {
   repeated string files = 1;
 }
 
+message ListAllResponse {
+  repeated string files = 1;
+  repeated string directories = 2;
+}
 
 message NodeInfo {
   string address = 1; 
