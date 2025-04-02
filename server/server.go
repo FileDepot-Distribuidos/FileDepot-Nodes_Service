@@ -3,11 +3,14 @@ package server
 import (
 	"context"
 	"encoding/base64"
+	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	pb "filesystem/proto/filesystem"
 
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -20,64 +23,62 @@ type Server struct {
 }
 
 // // Registrar el nodo con el servidor central
-// func (s *Server) RegisterWithCentral() {
-// centralAddress := os.Getenv("CENTRAL_SERVER_ADDRESS")
-// if centralAddress == "" {
-// 	log.Fatal("CENTRAL_SERVER_ADDRESS no está definido en el archivo .env")
-// }
-// 	conn, err := grpc.Dial("centralAddress", grpc.WithInsecure())
-// 	if err != nil {
-// 		log.Fatalf("No se pudo conectar al servidor central: %v", err)
-// 	}
-// 	defer conn.Close()
+func (s *Server) RegisterWithCentral() {
+	centralAddress := os.Getenv("CENTRAL_SERVER_ADDRESS")
+	if centralAddress == "" {
+		log.Fatal("CENTRAL_SERVER_ADDRESS no está definido en el archivo .env")
+	}
+	conn, err := grpc.Dial("centralAddress", grpc.WithInsecure())
+	if err != nil {
+		log.Fatalf("No se pudo conectar al servidor central: %v", err)
+	}
+	defer conn.Close()
 
-// 	client := pb.NewNodeServiceClient(conn)
-// 	_, err = client.RegisterNode(context.Background(), &pb.NodeInfo{
-// 		Address: "nodo-direccion",
-// 		Status:  "activo",
-// 	})
-// 	if err != nil {
-// 		log.Fatalf("Error registrando el nodo: %v", err)
-// 	}
-// }
+	client := pb.NewNodeServiceClient(conn)
+	_, err = client.RegisterNode(context.Background(), &pb.NodeInfo{
+		Address: "nodo-direccion",
+		Status:  "activo",
+	})
+	if err != nil {
+		log.Fatalf("Error registrando el nodo: %v", err)
+	}
+}
 
 // // Reportar estado del nodo (saber si esta ocupado, activo, etc)
-// func (s *Server) ReportStatus(status string) {
-// 	conn, err := grpc.Dial("central-server-address", grpc.WithInsecure())
-// 	if err != nil {
-// 		log.Fatalf("No se pudo conectar al servidor central: %v", err)
-// 	}
-// 	defer conn.Close()
+func (s *Server) ReportStatus(status string) {
+	conn, err := grpc.Dial("central-server-address", grpc.WithInsecure())
+	if err != nil {
+		log.Fatalf("No se pudo conectar al servidor central: %v", err)
+	}
+	defer conn.Close()
 
-// 	client := pb.NewNodeServiceClient(conn)
-// 	_, err = client.ReportStatus(context.Background(), &pb.NodeStatus{
-// 		Address: "nodo-direccion",
-// 		Status:  status,
-// 	})
-// 	if err != nil {
-// 		log.Fatalf("Error reportando estado: %v", err)
-// 	}
-// }
+	client := pb.NewNodeServiceClient(conn)
+	_, err = client.ReportStatus(context.Background(), &pb.NodeStatus{
+		Address: "nodo-direccion",
+		Status:  status,
+	})
+	if err != nil {
+		log.Fatalf("Error reportando estado: %v", err)
+	}
+}
 
 // // Enviar estado cada 10 segundos
-// func (s *Server) SendHeartbeat() {
-// 	for {
-// 		time.Sleep(10 * time.Second)
-// 		s.ReportStatus("activo")
-// 	}
-// }
+func (s *Server) SendHeartbeat() {
+	for {
+		time.Sleep(10 * time.Second)
+		s.ReportStatus("activo")
+	}
+}
 
 // Subir archivo en Base64
 func (s *Server) UploadFile(ctx context.Context, req *pb.UploadRequest) (*pb.Response, error) {
 	filename := req.Filename
 	base64Data := req.ContentBase64
 
-	// Verificar que el nombre no esté vacío
 	if filename == "" {
 		return &pb.Response{Message: "El nombre del archivo no puede estar vacío"}, nil
 	}
 
-	// Decodificar Base64 a bytes
 	data, err := base64.StdEncoding.DecodeString(base64Data)
 	if err != nil {
 		return &pb.Response{Message: "Error decodificando Base64"}, err
@@ -97,23 +98,14 @@ func (s *Server) UploadFile(ctx context.Context, req *pb.UploadRequest) (*pb.Res
 		filePath = filepath.Join(fullDir, filename)
 	}
 
-	// Guardar archivo en disco
 	err = os.WriteFile(filePath, data, 0644)
 	if err != nil {
 		return &pb.Response{Message: "Error escribiendo archivo"}, err
 	}
 
-	// Leer el archivo guardado y convertirlo a Base64
-	savedData, err := os.ReadFile(filePath)
-	if err != nil {
-		return &pb.Response{Message: "Error leyendo archivo guardado"}, err
-	}
-	encodedData := base64.StdEncoding.EncodeToString(savedData)
-
-	// Responder con el Base64 del archivo guardado
 	return &pb.Response{
-		Message:    "Archivo subido correctamente",
-		FileBase64: encodedData,
+		Message:  "Archivo subido correctamente",
+		FilePath: filePath,
 	}, nil
 }
 

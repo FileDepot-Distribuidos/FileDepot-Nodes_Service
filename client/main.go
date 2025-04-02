@@ -15,9 +15,7 @@ import (
 const serverAddress = "localhost:50051"
 
 func main() {
-	// Conectar con el servidor gRPC
-	conn, err := grpc.Dial("127.0.0.1:50051", grpc.WithInsecure())
-
+	conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
 	if err != nil {
 		log.Fatalf("No se pudo conectar: %v", err)
 	}
@@ -31,23 +29,19 @@ func main() {
 	uploadFile(client, "file2.txt", "Contenido del archivo 2")
 	uploadFile(client, "file3.txt", "Contenido del archivo 3")
 
-	// Crear directorio y subdirectorio
+	// Crear directorios
 	createDirectory(client, "newdir")
 	createSubdirectory(client, "newdir", "subdir")
 
 	// Listar archivos y carpetas
 	listAll(client, "newdir")
 
-	// Eliminar un archivo
+	// Operaciones sobre archivos
 	deleteFile(client, "file1.txt")
-
-	// Renombrar y mover un archivo
 	renameAndMoveFile(client, "file2.txt", "newdir/renamed.txt")
-
-	// Mover un archivo a un subdirectorio
 	moveFile(client, "file3.txt", "newdir/subdir/file3.txt")
 
-	// Volver a listar para ver cambios
+	// Listar nuevamente
 	listAll(client, "newdir")
 }
 
@@ -60,7 +54,7 @@ func uploadFile(client pb.FileSystemServiceClient, filename, content string) {
 	if err != nil {
 		log.Printf("Error subiendo archivo %s: %v", filename, err)
 	} else {
-		fmt.Printf("Subido: %s -> %s\n", filename, res.Message)
+		fmt.Printf("Subido: %s -> %s\nRuta: %s\n", filename, res.Message, res.FilePath)
 	}
 	time.Sleep(1 * time.Second)
 }
@@ -124,7 +118,6 @@ func moveFile(client pb.FileSystemServiceClient, source, destination string) {
 	time.Sleep(1 * time.Second)
 }
 
-// Función para listar archivos y directorios en un path
 func listAll(client pb.FileSystemServiceClient, path string) {
 	res, err := client.ListFiles(context.Background(), &pb.DirectoryRequest{Path: path})
 	if err != nil {
