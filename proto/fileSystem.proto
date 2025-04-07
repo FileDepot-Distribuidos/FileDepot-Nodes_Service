@@ -55,8 +55,11 @@ message MoveRequest {
 
 message Response {
   string message = 1;
-  string fileBase64 = 2;
-  string filePath = 3;
+  string file_path = 2;
+  string file_name = 3;
+  int64 file_size = 4;
+  string file_type = 5;
+  string nodeId  = 6;
 }
 
 message ListResponse {

@@ -54,7 +54,13 @@ func uploadFile(client pb.FileSystemServiceClient, filename, content string) {
 	if err != nil {
 		log.Printf("Error subiendo archivo %s: %v", filename, err)
 	} else {
-		fmt.Printf("Subido: %s -> %s\nRuta: %s\n", filename, res.Message, res.FilePath)
+		fmt.Printf("✅ Subido: %s\n", filename)
+		fmt.Printf("📁 Ruta: %s\n", res.FilePath)
+		fmt.Printf("📄 Nombre: %s\n", res.FileName)
+		fmt.Printf("📦 Tamaño: %d bytes\n", res.FileSize)
+		fmt.Printf("🧾 Tipo MIME: %s\n", res.FileType)
+		fmt.Printf("Node ID: %s\n", res.NodeId)
+
 	}
 	time.Sleep(1 * time.Second)
 }

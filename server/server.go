@@ -3,14 +3,14 @@ package server
 import (
 	"context"
 	"encoding/base64"
+	pb "filesystem/proto/filesystem"
 	"log"
+	"mime"
+	"net/http"
 	"os"
 	"path/filepath"
-	"time"
 
-	pb "filesystem/proto/filesystem"
-
-	"google.golang.org/grpc"
+	"github.com/joho/godotenv"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -22,58 +22,70 @@ type Server struct {
 	pb.UnimplementedFileSystemServiceServer
 }
 
-// // Registrar el nodo con el servidor central
-func (s *Server) RegisterWithCentral() {
-	centralAddress := os.Getenv("CENTRAL_SERVER_ADDRESS")
-	if centralAddress == "" {
-		log.Fatal("CENTRAL_SERVER_ADDRESS no está definido en el archivo .env")
-	}
-	conn, err := grpc.Dial("centralAddress", grpc.WithInsecure())
-	if err != nil {
-		log.Fatalf("No se pudo conectar al servidor central: %v", err)
-	}
-	defer conn.Close()
+// // // Registrar el nodo con el servidor central
+// func (s *Server) RegisterWithCentral() {
+// 	centralAddress := os.Getenv("CENTRAL_SERVER_ADDRESS")
+// 	if centralAddress == "" {
+// 		log.Fatal("CENTRAL_SERVER_ADDRESS no está definido en el archivo .env")
+// 	}
+// 	conn, err := grpc.Dial("centralAddress", grpc.WithInsecure())
+// 	if err != nil {
+// 		log.Fatalf("No se pudo conectar al servidor central: %v", err)
+// 	}
+// 	defer conn.Close()
 
-	client := pb.NewNodeServiceClient(conn)
-	_, err = client.RegisterNode(context.Background(), &pb.NodeInfo{
-		Address: "nodo-direccion",
-		Status:  "activo",
-	})
-	if err != nil {
-		log.Fatalf("Error registrando el nodo: %v", err)
-	}
-}
+// 	client := pb.NewNodeServiceClient(conn)
+// 	_, err = client.RegisterNode(context.Background(), &pb.NodeInfo{
+// 		Address: "nodo-direccion",
+// 		Status:  "activo",
+// 	})
+// 	if err != nil {
+// 		log.Fatalf("Error registrando el nodo: %v", err)
+// 	}
+// }
 
-// // Reportar estado del nodo (saber si esta ocupado, activo, etc)
-func (s *Server) ReportStatus(status string) {
-	conn, err := grpc.Dial("central-server-address", grpc.WithInsecure())
-	if err != nil {
-		log.Fatalf("No se pudo conectar al servidor central: %v", err)
-	}
-	defer conn.Close()
+// // // Reportar estado del nodo (saber si esta ocupado, activo, etc)
+// func (s *Server) ReportStatus(status string) {
+// 	conn, err := grpc.Dial("central-server-address", grpc.WithInsecure())
+// 	if err != nil {
+// 		log.Fatalf("No se pudo conectar al servidor central: %v", err)
+// 	}
+// 	defer conn.Close()
 
-	client := pb.NewNodeServiceClient(conn)
-	_, err = client.ReportStatus(context.Background(), &pb.NodeStatus{
-		Address: "nodo-direccion",
-		Status:  status,
-	})
-	if err != nil {
-		log.Fatalf("Error reportando estado: %v", err)
-	}
-}
+// 	client := pb.NewNodeServiceClient(conn)
+// 	_, err = client.ReportStatus(context.Background(), &pb.NodeStatus{
+// 		Address: "nodo-direccion",
+// 		Status:  status,
+// 	})
+// 	if err != nil {
+// 		log.Fatalf("Error reportando estado: %v", err)
+// 	}
+// }
 
-// // Enviar estado cada 10 segundos
-func (s *Server) SendHeartbeat() {
-	for {
-		time.Sleep(10 * time.Second)
-		s.ReportStatus("activo")
-	}
-}
+// // // Enviar estado cada 10 segundos
+// func (s *Server) SendHeartbeat() {
+// 	for {
+// 		time.Sleep(10 * time.Second)
+// 		s.ReportStatus("activo")
+// 	}
+// }
 
 // Subir archivo en Base64
 func (s *Server) UploadFile(ctx context.Context, req *pb.UploadRequest) (*pb.Response, error) {
 	filename := req.Filename
 	base64Data := req.ContentBase64
+
+	// Cargar variables de entorno desde el archivo .env
+	err := godotenv.Load()
+	if err != nil {
+		log.Println("No se pudo cargar el archivo .env")
+	}
+
+	nodeIDStr := os.Getenv("NODE_ID")
+	// En caso de estar vacío se pondrá un valor por defecto
+	if nodeIDStr == "" {
+		nodeIDStr = "1"
+	}
 
 	if filename == "" {
 		return &pb.Response{Message: "El nombre del archivo no puede estar vacío"}, nil
@@ -103,9 +115,25 @@ func (s *Server) UploadFile(ctx context.Context, req *pb.UploadRequest) (*pb.Res
 		return &pb.Response{Message: "Error escribiendo archivo"}, err
 	}
 
+	// Obtener tipo de archivo (MIME type)
+	mimeType := http.DetectContentType(data)
+
+	// Alternativamente, usar extensión si deseas más precisión:
+	ext := filepath.Ext(filename)
+	if ext != "" {
+		mimeFromExt := mime.TypeByExtension(ext)
+		if mimeFromExt != "" {
+			mimeType = mimeFromExt
+		}
+	}
+
 	return &pb.Response{
 		Message:  "Archivo subido correctamente",
 		FilePath: filePath,
+		FileName: filename,
+		FileSize: int64(len(data)),
+		FileType: mimeType,
+		NodeId:   nodeIDStr,
 	}, nil
 }
 
