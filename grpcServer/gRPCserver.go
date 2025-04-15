@@ -67,6 +67,8 @@ func main() {
 
 	grpcServer := grpc.NewServer(
 		grpc.UnaryInterceptor(unaryInterceptor),
+		grpc.MaxRecvMsgSize(20*1024*1024), // aumenta límite a 20MB
+		grpc.MaxSendMsgSize(20*1024*1024), // aumenta límite a 20MB
 	)
 
 	fileSystemServer := server.NewServer()
