@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"encoding/base64"
+	"strings"
+
 	pb "filesystem/proto/filesystem"
 	"log"
 	"mime"
@@ -278,6 +280,100 @@ func (s *Server) ListAll(ctx context.Context, req *pb.DirectoryRequest) (*pb.Lis
 	return &pb.ListAllResponse{
 		Files:       files,
 		Directories: directories,
+	}, nil
+}
+
+// Estructura para la respuesta de la descarga
+type FileRequest struct {
+	Success  bool   `json:"success"`
+	FileID   int    `json:"fileID"`
+	FileName string `json:"fileName"`
+	NodeID   int    `json:"nodeID"`
+	NodeIP   string `json:"nodeIP"`
+	FilePath string `json:"filePath"`
+}
+
+// Descargar un archivo
+type fileInfo struct {
+	FileName string `json:"fileName"`
+	FilePath string `json:"filePath"`
+}
+
+func (s *Server) DownloadFile(ctx context.Context, req *pb.DownloadRequest) (*pb.DownloadResponse, error) {
+	// Asegúrate de que req.Path sea solo una ruta válida
+	if req.Path == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "Ruta proporcionada es vacía")
+	}
+
+	// Asegurarse de que no esté recibiendo un JSON o algo inesperado
+	if strings.Contains(req.Path, "{") || strings.Contains(req.Path, "}") {
+		return nil, status.Errorf(codes.InvalidArgument, "La ruta proporcionada contiene un formato JSON inválido: %s", req.Path)
+	}
+
+	// Ahora se crea la ruta completa
+	fullPath := filepath.Join(rootDirectory, req.Path)
+
+	// Log para saber si se llegó al archivo
+	log.Printf("Intentando acceder al archivo: %s", fullPath)
+
+	// Verificar si el archivo existe
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			log.Printf("El archivo no existe: %s", fullPath)
+			return nil, status.Errorf(codes.NotFound, "El archivo no existe")
+		}
+		log.Printf("Error al obtener información del archivo: %v", err)
+		return nil, status.Errorf(codes.Internal, "Error al obtener información del archivo: %v", err)
+	}
+
+	// Si es un directorio, no un archivo
+	if info.IsDir() {
+		log.Printf("La ruta proporcionada es un directorio, no un archivo: %s", fullPath)
+		return nil, status.Errorf(codes.InvalidArgument, "La ruta proporcionada es un directorio, no un archivo")
+	}
+
+	// Log para saber si se encontró el archivo
+	log.Printf("Archivo encontrado: %s", fullPath)
+
+	// Leer el archivo
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		log.Printf("Error al leer el archivo %s: %v", fullPath, err)
+		return nil, status.Errorf(codes.Internal, "Error al leer el archivo: %v", err)
+	}
+	log.Printf("Tamaño de datos leídos: %d bytes", len(data))
+
+	// Log para saber si el archivo se leyó correctamente
+	log.Printf("Archivo leído exitosamente: %s", fullPath)
+
+	// Codificar en Base64
+	base64Content := base64.StdEncoding.EncodeToString(data)
+
+	// Log para saber si la conversión a Base64 fue exitosa
+	log.Printf("Archivo convertido a Base64 exitosamente: %s", fullPath)
+
+	// Obtener tipo MIME
+	mimeType := http.DetectContentType(data)
+	ext := filepath.Ext(req.Path)
+	if ext != "" {
+		mimeFromExt := mime.TypeByExtension(ext)
+		if mimeFromExt != "" {
+			mimeType = mimeFromExt
+		}
+	}
+	log.Printf("Respuesta enviada al cliente:\nFilename: %s\nFilesize: %d\nFileType: %s\nBase64 (primeros 100): %.100s",
+		filepath.Base(fullPath),
+		info.Size(),
+		mimeType,
+		base64Content,
+	)
+
+	return &pb.DownloadResponse{
+		Filename:      filepath.Base(fullPath),
+		ContentBase64: base64Content,
+		Filesize:      info.Size(),
+		FileType:      mimeType,
 	}, nil
 }
 
