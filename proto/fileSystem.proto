@@ -13,6 +13,8 @@ service FileSystemService {
   rpc DeleteFile (DeleteRequest) returns (Response);
   rpc ListFiles (DirectoryRequest) returns (ListResponse);
   rpc MoveFile (MoveRequest) returns (Response);
+  rpc ListAll (DirectoryRequest) returns (ListAllResponse);
+  rpc DownloadFile (DownloadRequest) returns (DownloadResponse); // <--- Nuevo método
 }
 
 // Servicio para el registro y estado de los nodos
@@ -26,6 +28,7 @@ message UploadRequest {
   string filename = 1;
   string directory = 2;  // Puede estar vacío
   bytes content = 3;
+  string contentBase64 = 4;
 }
 
 message DirectoryRequest {
@@ -53,19 +56,40 @@ message MoveRequest {
 
 message Response {
   string message = 1;
+  string file_path = 2;
+  string file_name = 3;
+  int64 file_size = 4;
+  string file_type = 5;
+  string nodeId  = 6;
 }
 
 message ListResponse {
   repeated string files = 1;
 }
 
-// Mensajes para el registro y estado de los nodos
+message ListAllResponse {
+  repeated string files = 1;
+  repeated string directories = 2;
+}
+
+// Nuevos mensajes para descargar archivos
+message DownloadRequest {
+  string path = 1;
+}
+
+message DownloadResponse {
+  string filename = 1;
+  string content_base64 = 2;
+  int64 filesize = 3;
+  string file_type = 4;
+}
+
 message NodeInfo {
-  string address = 1; // Dirección del nodo (por ejemplo, "ip:puerto")
-  string status = 2;  // Estado inicial (por ejemplo, "activo")
+  string address = 1;
+  string status = 2;
 }
 
 message NodeStatus {
-  string address = 1; 
-  string status = 2;  
+  string address = 1;
+  string status = 2;
 }

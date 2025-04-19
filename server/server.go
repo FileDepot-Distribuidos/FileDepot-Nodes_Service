@@ -2,29 +2,34 @@ package server
 
 import (
 	"context"
-	"os"
-
-	"path/filepath"
+	"encoding/base64"
+	"strings"
 
 	pb "filesystem/proto/filesystem"
+	"log"
+	"mime"
+	"net/http"
+	"os"
+	"path/filepath"
 
+	"github.com/joho/godotenv"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-// Archivo raíz (el default del user)
+// Acá se marca la ruta dentro de la vm donde se ejecuta de donde se guardará cada archivo.
 const rootDirectory = "storage"
 
 type Server struct {
 	pb.UnimplementedFileSystemServiceServer
 }
 
-// // Registrar el nodo con el servidor central
+// // // Registrar el nodo con el servidor central
 // func (s *Server) RegisterWithCentral() {
-// centralAddress := os.Getenv("CENTRAL_SERVER_ADDRESS")
-// if centralAddress == "" {
-// 	log.Fatal("CENTRAL_SERVER_ADDRESS no está definido en el archivo .env")
-// }
+// 	centralAddress := os.Getenv("CENTRAL_SERVER_ADDRESS")
+// 	if centralAddress == "" {
+// 		log.Fatal("CENTRAL_SERVER_ADDRESS no está definido en el archivo .env")
+// 	}
 // 	conn, err := grpc.Dial("centralAddress", grpc.WithInsecure())
 // 	if err != nil {
 // 		log.Fatalf("No se pudo conectar al servidor central: %v", err)
@@ -41,7 +46,7 @@ type Server struct {
 // 	}
 // }
 
-// // Reportar estado del nodo (saber si esta ocupado, activo, etc)
+// // // Reportar estado del nodo (saber si esta ocupado, activo, etc)
 // func (s *Server) ReportStatus(status string) {
 // 	conn, err := grpc.Dial("central-server-address", grpc.WithInsecure())
 // 	if err != nil {
@@ -59,7 +64,7 @@ type Server struct {
 // 	}
 // }
 
-// // Enviar estado cada 10 segundos
+// // // Enviar estado cada 10 segundos
 // func (s *Server) SendHeartbeat() {
 // 	for {
 // 		time.Sleep(10 * time.Second)
@@ -67,16 +72,33 @@ type Server struct {
 // 	}
 // }
 
-// Subir archivo
+// Subir archivo en Base64
 func (s *Server) UploadFile(ctx context.Context, req *pb.UploadRequest) (*pb.Response, error) {
 	filename := req.Filename
-	data := req.Content
+	base64Data := req.ContentBase64
 
-	// Verificar que no esté vacío
+	// Cargar variables de entorno desde el archivo .env
+	err := godotenv.Load()
+	if err != nil {
+		log.Println("No se pudo cargar el archivo .env")
+	}
+
+	nodeIDStr := os.Getenv("NODE_ID")
+	// En caso de estar vacío se pondrá un valor por defecto
+	if nodeIDStr == "" {
+		nodeIDStr = "1"
+	}
+
 	if filename == "" {
 		return &pb.Response{Message: "El nombre del archivo no puede estar vacío"}, nil
 	}
 
+	data, err := base64.StdEncoding.DecodeString(base64Data)
+	if err != nil {
+		return &pb.Response{Message: "Error decodificando Base64"}, err
+	}
+
+	// Crear directorios si no existen
 	if err := os.MkdirAll(rootDirectory, os.ModePerm); err != nil {
 		return &pb.Response{Message: "Error creando directorio raíz"}, err
 	}
@@ -90,29 +112,46 @@ func (s *Server) UploadFile(ctx context.Context, req *pb.UploadRequest) (*pb.Res
 		filePath = filepath.Join(fullDir, filename)
 	}
 
-	err := os.WriteFile(filePath, data, 0644)
+	err = os.WriteFile(filePath, data, 0644)
 	if err != nil {
 		return &pb.Response{Message: "Error escribiendo archivo"}, err
 	}
 
-	return &pb.Response{Message: "Archivo subido correctamente a " + filePath}, nil
+	// Obtener tipo de archivo (MIME type)
+	mimeType := http.DetectContentType(data)
+
+	// Alternativamente, usar extensión si deseas más precisión:
+	ext := filepath.Ext(filename)
+	if ext != "" {
+		mimeFromExt := mime.TypeByExtension(ext)
+		if mimeFromExt != "" {
+			mimeType = mimeFromExt
+		}
+	}
+
+	return &pb.Response{
+		Message:  "Archivo subido correctamente",
+		FilePath: filePath,
+		FileName: filename,
+		FileSize: int64(len(data)),
+		FileType: mimeType,
+		NodeId:   nodeIDStr,
+	}, nil
 }
 
 // Mover un archivo
 func (s *Server) MoveFile(ctx context.Context, req *pb.MoveRequest) (*pb.Response, error) {
-	sourcePath := req.SourcePath
-	destinationPath := req.DestinationPath
+	sourcePath := filepath.Join(rootDirectory, req.SourcePath)
+	destPath := filepath.Join(rootDirectory, req.DestinationPath)
 
-	if _, err := os.Stat(req.SourcePath); os.IsNotExist(err) {
-		return nil, status.Errorf(codes.NotFound, "El archivo '%s' no existe en el servidor", req.SourcePath)
+	if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
+		return nil, status.Errorf(codes.NotFound, "El archivo fuente no existe")
 	}
 
-	// Mover el archivo o directorio
-	err := os.Rename(sourcePath, destinationPath)
-	if err != nil {
-		return &pb.Response{Message: "Error moviendo archivo/directorio"}, err
+	if err := os.Rename(sourcePath, destPath); err != nil {
+		return nil, status.Errorf(codes.Internal, "Error al mover archivo: %v", err)
 	}
-	return &pb.Response{Message: "Archivo/Directorio movido correctamente"}, nil
+	return &pb.Response{Message: "Archivo movido con éxito"}, nil
 }
 
 // Crear un nuevo directorio
@@ -129,7 +168,7 @@ func (s *Server) CreateDirectory(ctx context.Context, req *pb.DirectoryRequest) 
 	return &pb.Response{Message: "Directorio creado correctamente"}, nil
 }
 
-// Crea un subdirectorio dentro de otro directorio
+// Crea un subdirectorio
 func (s *Server) CreateSubdirectory(ctx context.Context, req *pb.SubdirectoryRequest) (*pb.Response, error) {
 	if req.ParentDirectory == "" || req.SubdirectoryName == "" {
 		return &pb.Response{Message: "El nombre del directorio padre y del subdirectorio no pueden estar vacíos"}, nil
@@ -148,16 +187,14 @@ func (s *Server) RenameFile(ctx context.Context, req *pb.RenameRequest) (*pb.Res
 	oldPath := filepath.Join(rootDirectory, req.OldName)
 	newPath := filepath.Join(rootDirectory, req.NewName)
 
-	// Verificar si el archivo/directorio existe antes de renombrar
 	if _, err := os.Stat(oldPath); os.IsNotExist(err) {
-		return &pb.Response{Message: "El archivo/directorio no existe"}, nil
+		return nil, status.Errorf(codes.NotFound, "El archivo a renombrar no existe")
 	}
 
-	err := os.Rename(oldPath, newPath)
-	if err != nil {
-		return &pb.Response{Message: "Error renombrando archivo/directorio"}, err
+	if err := os.Rename(oldPath, newPath); err != nil {
+		return nil, status.Errorf(codes.Internal, "Error al renombrar archivo: %v", err)
 	}
-	return &pb.Response{Message: "Archivo/Directorio renombrado correctamente"}, nil
+	return &pb.Response{Message: "Archivo renombrado con éxito"}, nil
 }
 
 // Elimina un archivo o directorio
@@ -202,6 +239,142 @@ func (s *Server) ListFiles(ctx context.Context, req *pb.DirectoryRequest) (*pb.L
 	}
 
 	return &pb.ListResponse{Files: filenames}, nil
+}
+
+func (s *Server) ListDirectories(ctx context.Context, req *pb.DirectoryRequest) (*pb.ListResponse, error) {
+	fullPath := filepath.Join(rootDirectory, req.Path)
+
+	entries, err := os.ReadDir(fullPath)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "No se pudo leer el directorio: %v", err)
+	}
+
+	var directories []string
+	for _, entry := range entries {
+		if entry.IsDir() { // Solo directorios
+			directories = append(directories, entry.Name())
+		}
+	}
+
+	return &pb.ListResponse{Files: directories}, nil
+}
+
+func (s *Server) ListAll(ctx context.Context, req *pb.DirectoryRequest) (*pb.ListAllResponse, error) {
+	fullPath := filepath.Join(rootDirectory, req.Path)
+
+	entries, err := os.ReadDir(fullPath)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "No se pudo leer el directorio: %v", err)
+	}
+
+	var files []string
+	var directories []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			directories = append(directories, entry.Name())
+		} else {
+			files = append(files, entry.Name())
+		}
+	}
+
+	return &pb.ListAllResponse{
+		Files:       files,
+		Directories: directories,
+	}, nil
+}
+
+// Estructura para la respuesta de la descarga
+type FileRequest struct {
+	Success  bool   `json:"success"`
+	FileID   int    `json:"fileID"`
+	FileName string `json:"fileName"`
+	NodeID   int    `json:"nodeID"`
+	NodeIP   string `json:"nodeIP"`
+	FilePath string `json:"filePath"`
+}
+
+// Descargar un archivo
+type fileInfo struct {
+	FileName string `json:"fileName"`
+	FilePath string `json:"filePath"`
+}
+
+func (s *Server) DownloadFile(ctx context.Context, req *pb.DownloadRequest) (*pb.DownloadResponse, error) {
+	// Asegúrate de que req.Path sea solo una ruta válida
+	if req.Path == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "Ruta proporcionada es vacía")
+	}
+
+	// Asegurarse de que no esté recibiendo un JSON o algo inesperado
+	if strings.Contains(req.Path, "{") || strings.Contains(req.Path, "}") {
+		return nil, status.Errorf(codes.InvalidArgument, "La ruta proporcionada contiene un formato JSON inválido: %s", req.Path)
+	}
+
+	// Ahora se crea la ruta completa
+	fullPath := filepath.Join(rootDirectory, req.Path)
+
+	// Log para saber si se llegó al archivo
+	log.Printf("Intentando acceder al archivo: %s", fullPath)
+
+	// Verificar si el archivo existe
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			log.Printf("El archivo no existe: %s", fullPath)
+			return nil, status.Errorf(codes.NotFound, "El archivo no existe")
+		}
+		log.Printf("Error al obtener información del archivo: %v", err)
+		return nil, status.Errorf(codes.Internal, "Error al obtener información del archivo: %v", err)
+	}
+
+	// Si es un directorio, no un archivo
+	if info.IsDir() {
+		log.Printf("La ruta proporcionada es un directorio, no un archivo: %s", fullPath)
+		return nil, status.Errorf(codes.InvalidArgument, "La ruta proporcionada es un directorio, no un archivo")
+	}
+
+	// Log para saber si se encontró el archivo
+	log.Printf("Archivo encontrado: %s", fullPath)
+
+	// Leer el archivo
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		log.Printf("Error al leer el archivo %s: %v", fullPath, err)
+		return nil, status.Errorf(codes.Internal, "Error al leer el archivo: %v", err)
+	}
+	log.Printf("Tamaño de datos leídos: %d bytes", len(data))
+
+	// Log para saber si el archivo se leyó correctamente
+	log.Printf("Archivo leído exitosamente: %s", fullPath)
+
+	// Codificar en Base64
+	base64Content := base64.StdEncoding.EncodeToString(data)
+
+	// Log para saber si la conversión a Base64 fue exitosa
+	log.Printf("Archivo convertido a Base64 exitosamente: %s", fullPath)
+
+	// Obtener tipo MIME
+	mimeType := http.DetectContentType(data)
+	ext := filepath.Ext(req.Path)
+	if ext != "" {
+		mimeFromExt := mime.TypeByExtension(ext)
+		if mimeFromExt != "" {
+			mimeType = mimeFromExt
+		}
+	}
+	log.Printf("Respuesta enviada al cliente:\nFilename: %s\nFilesize: %d\nFileType: %s\nBase64 (primeros 100): %.100s",
+		filepath.Base(fullPath),
+		info.Size(),
+		mimeType,
+		base64Content,
+	)
+
+	return &pb.DownloadResponse{
+		Filename:      filepath.Base(fullPath),
+		ContentBase64: base64Content,
+		Filesize:      info.Size(),
+		FileType:      mimeType,
+	}, nil
 }
 
 // Instancia de server

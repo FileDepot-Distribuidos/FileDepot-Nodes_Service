@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v6.30.1
-// source: fileSystem.proto
+// source: proto/filesystem.proto
 
 package filesystem
 
@@ -26,6 +26,8 @@ const (
 	FileSystemService_DeleteFile_FullMethodName         = "/filesystem.FileSystemService/DeleteFile"
 	FileSystemService_ListFiles_FullMethodName          = "/filesystem.FileSystemService/ListFiles"
 	FileSystemService_MoveFile_FullMethodName           = "/filesystem.FileSystemService/MoveFile"
+	FileSystemService_ListAll_FullMethodName            = "/filesystem.FileSystemService/ListAll"
+	FileSystemService_DownloadFile_FullMethodName       = "/filesystem.FileSystemService/DownloadFile"
 )
 
 // FileSystemServiceClient is the client API for FileSystemService service.
@@ -41,6 +43,8 @@ type FileSystemServiceClient interface {
 	DeleteFile(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*Response, error)
 	ListFiles(ctx context.Context, in *DirectoryRequest, opts ...grpc.CallOption) (*ListResponse, error)
 	MoveFile(ctx context.Context, in *MoveRequest, opts ...grpc.CallOption) (*Response, error)
+	ListAll(ctx context.Context, in *DirectoryRequest, opts ...grpc.CallOption) (*ListAllResponse, error)
+	DownloadFile(ctx context.Context, in *DownloadRequest, opts ...grpc.CallOption) (*DownloadResponse, error)
 }
 
 type fileSystemServiceClient struct {
@@ -121,6 +125,26 @@ func (c *fileSystemServiceClient) MoveFile(ctx context.Context, in *MoveRequest,
 	return out, nil
 }
 
+func (c *fileSystemServiceClient) ListAll(ctx context.Context, in *DirectoryRequest, opts ...grpc.CallOption) (*ListAllResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAllResponse)
+	err := c.cc.Invoke(ctx, FileSystemService_ListAll_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fileSystemServiceClient) DownloadFile(ctx context.Context, in *DownloadRequest, opts ...grpc.CallOption) (*DownloadResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DownloadResponse)
+	err := c.cc.Invoke(ctx, FileSystemService_DownloadFile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FileSystemServiceServer is the server API for FileSystemService service.
 // All implementations must embed UnimplementedFileSystemServiceServer
 // for forward compatibility.
@@ -134,6 +158,8 @@ type FileSystemServiceServer interface {
 	DeleteFile(context.Context, *DeleteRequest) (*Response, error)
 	ListFiles(context.Context, *DirectoryRequest) (*ListResponse, error)
 	MoveFile(context.Context, *MoveRequest) (*Response, error)
+	ListAll(context.Context, *DirectoryRequest) (*ListAllResponse, error)
+	DownloadFile(context.Context, *DownloadRequest) (*DownloadResponse, error)
 	mustEmbedUnimplementedFileSystemServiceServer()
 }
 
@@ -164,6 +190,12 @@ func (UnimplementedFileSystemServiceServer) ListFiles(context.Context, *Director
 }
 func (UnimplementedFileSystemServiceServer) MoveFile(context.Context, *MoveRequest) (*Response, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MoveFile not implemented")
+}
+func (UnimplementedFileSystemServiceServer) ListAll(context.Context, *DirectoryRequest) (*ListAllResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListAll not implemented")
+}
+func (UnimplementedFileSystemServiceServer) DownloadFile(context.Context, *DownloadRequest) (*DownloadResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DownloadFile not implemented")
 }
 func (UnimplementedFileSystemServiceServer) mustEmbedUnimplementedFileSystemServiceServer() {}
 func (UnimplementedFileSystemServiceServer) testEmbeddedByValue()                           {}
@@ -312,6 +344,42 @@ func _FileSystemService_MoveFile_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _FileSystemService_ListAll_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DirectoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileSystemServiceServer).ListAll(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileSystemService_ListAll_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileSystemServiceServer).ListAll(ctx, req.(*DirectoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FileSystemService_DownloadFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DownloadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileSystemServiceServer).DownloadFile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileSystemService_DownloadFile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileSystemServiceServer).DownloadFile(ctx, req.(*DownloadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // FileSystemService_ServiceDesc is the grpc.ServiceDesc for FileSystemService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -347,9 +415,17 @@ var FileSystemService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "MoveFile",
 			Handler:    _FileSystemService_MoveFile_Handler,
 		},
+		{
+			MethodName: "ListAll",
+			Handler:    _FileSystemService_ListAll_Handler,
+		},
+		{
+			MethodName: "DownloadFile",
+			Handler:    _FileSystemService_DownloadFile_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "fileSystem.proto",
+	Metadata: "proto/filesystem.proto",
 }
 
 const (
@@ -493,5 +569,5 @@ var NodeService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "fileSystem.proto",
+	Metadata: "proto/filesystem.proto",
 }

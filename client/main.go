@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"time"
@@ -11,129 +12,39 @@ import (
 	"google.golang.org/grpc"
 )
 
-const serverAddr = "localhost:50051"
+const serverAddress = "localhost:50051"
 
 func main() {
-	// Conectar con el servidor gRPC
-	conn, err := grpc.Dial(serverAddr, grpc.WithInsecure())
+	conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
 	if err != nil {
-		log.Fatalf("Error conectando al servidor: %v", err)
+		log.Fatalf("No se pudo conectar: %v", err)
 	}
 	defer conn.Close()
 
 	client := pb.NewFileSystemServiceClient(conn)
+	time.Sleep(2 * time.Second)
 
-	// Ejecutar pruebas con pausas entre ellas
-	testUploadFile(client, "file1.txt")
-	time.Sleep(1 * time.Second)
-
-	testUploadFile(client, "file2.txt")
-	time.Sleep(1 * time.Second)
-
-	testRenameFile(client, "file1.txt", "file1_renamed.txt")
-	time.Sleep(1 * time.Second)
-
-	testDeleteFile(client, "file2.txt")
-	time.Sleep(1 * time.Second)
-
-	testCreateDirectory(client)
-	time.Sleep(1 * time.Second)
-
-	testMoveFile(client)
-	time.Sleep(1 * time.Second)
-
-	testListFiles(client)
-	time.Sleep(1 * time.Second)
+	// Subir archivos
+	uploadFile(client, "file1.txt", "Contenido del archivo 1")
+	uploadFile(client, "file2.txt", "Contenido del archivo 2")
+	uploadFile(client, "file3.txt", "Contenido del archivo 3")
 }
 
-// Subir un archivo
-func testUploadFile(client pb.FileSystemServiceClient, filename string) {
-	fmt.Printf("=== Prueba: Subir archivo %s ===\n", filename)
-
-	fileContent := []byte("Contenido de prueba")
-	req := &pb.UploadRequest{
-		Filename:  filename,
-		Content:   fileContent,
-		Directory: "", // Opcional: especificar un subdirectorio
-	}
-
-	res, err := client.UploadFile(context.Background(), req)
+func uploadFile(client pb.FileSystemServiceClient, filename, content string) {
+	encodedContent := base64.StdEncoding.EncodeToString([]byte(content))
+	res, err := client.UploadFile(context.Background(), &pb.UploadRequest{
+		Filename:      filename,
+		ContentBase64: encodedContent,
+	})
 	if err != nil {
-		log.Printf("Error al subir archivo %s: %v\n", filename, err)
+		log.Printf("Error subiendo archivo %s: %v", filename, err)
 	} else {
-		fmt.Println(res.Message)
+		fmt.Printf("✅ Subido: %s\n", filename)
+		fmt.Printf("📁 Ruta: %s\n", res.FilePath)
+		fmt.Printf("📄 Nombre: %s\n", res.FileName)
+		fmt.Printf("📦 Tamaño: %d bytes\n", res.FileSize)
+		fmt.Printf("🧾 Tipo MIME: %s\n", res.FileType)
+		fmt.Printf("Node ID: %s\n", res.NodeId)
 	}
-}
-
-// Crear un directorio
-func testCreateDirectory(client pb.FileSystemServiceClient) {
-	fmt.Println("=== Prueba: Crear directorio ===")
-
-	req := &pb.DirectoryRequest{Path: "test_dir"}
-	res, err := client.CreateDirectory(context.Background(), req)
-	if err != nil {
-		log.Printf("Error al crear directorio: %v\n", err)
-	} else {
-		fmt.Println(res.Message)
-	}
-}
-
-// Mover un archivo
-func testMoveFile(client pb.FileSystemServiceClient) {
-	fmt.Println("=== Prueba: Mover archivo ===")
-
-	req := &pb.MoveRequest{
-		SourcePath:      "storage/file1_renamed.txt",
-		DestinationPath: "storage/test_dir/file1_renamed.txt",
-	}
-
-	res, err := client.MoveFile(context.Background(), req)
-	if err != nil {
-		log.Printf("Error al mover archivo: %v\n", err)
-	} else {
-		fmt.Println(res.Message)
-	}
-}
-
-// Renombrar un archivo
-func testRenameFile(client pb.FileSystemServiceClient, oldName, newName string) {
-	fmt.Printf("=== Prueba: Renombrar archivo %s a %s ===\n", oldName, newName)
-
-	req := &pb.RenameRequest{
-		OldName: oldName,
-		NewName: newName,
-	}
-
-	res, err := client.RenameFile(context.Background(), req)
-	if err != nil {
-		log.Printf("Error al renombrar archivo: %v\n", err)
-	} else {
-		fmt.Println(res.Message)
-	}
-}
-
-// Eliminar un archivo
-func testDeleteFile(client pb.FileSystemServiceClient, filename string) {
-	fmt.Printf("=== Prueba: Eliminar archivo %s ===\n", filename)
-
-	req := &pb.DeleteRequest{Path: filename}
-	res, err := client.DeleteFile(context.Background(), req)
-	if err != nil {
-		log.Printf("Error al eliminar archivo %s: %v\n", filename, err)
-	} else {
-		fmt.Println(res.Message)
-	}
-}
-
-// Listar archivos en un directorio
-func testListFiles(client pb.FileSystemServiceClient) {
-	fmt.Println("=== Prueba: Listar archivos ===")
-
-	req := &pb.DirectoryRequest{Path: "test_dir"}
-	res, err := client.ListFiles(context.Background(), req)
-	if err != nil {
-		log.Printf("Error al listar archivos: %v\n", err)
-	} else {
-		fmt.Println("Archivos en test_dir:", res.Files)
-	}
+	time.Sleep(1 * time.Second)
 }
