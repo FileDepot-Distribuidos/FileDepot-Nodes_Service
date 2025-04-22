@@ -17,27 +17,37 @@ import (
 )
 
 func main() {
-	// Usar 4 hilos de cpu
-	runtime.GOMAXPROCS(4)
-	log.Println("Configurado para usar hasta 4 hilos de CPU")
-
 	err := godotenv.Load()
 	if err != nil {
-		log.Println("Advertencia: No se pudo cargar el archivo .env, usando valores por defecto.")
+		log.Println("No se pudo cargar el archivo .env, usando valores por defecto.")
+	}
+
+	ip := os.Getenv("IP_ADDRESS")
+	if ip == "" {
+		ip = "127.0.0.1"
+		log.Println("IP_ADDRESS no definido, usando 127.0.0.1 por defecto.")
 	}
 
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "50051"
+		log.Println("PORT no definido, usando 50051 por defecto.")
 	}
 
-	// pool de workers
-	workerCount := 4
+	nodeID := os.Getenv("NODE_ID")
+	if nodeID == "" {
+		nodeID = "1"
+		log.Println("NODE_ID no definido, usando 1 por defecto.")
+	}
+
+	log.Printf("Nodo %s iniciando en %s:%s\n", nodeID, ip, port)
+
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
 	var wg sync.WaitGroup
 	workChan := make(chan func(), 100)
 
-	// Iniciar workers
-	for i := 0; i < workerCount; i++ {
+	for i := 0; i < 4; i++ {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
@@ -45,17 +55,15 @@ func main() {
 			for work := range workChan {
 				work()
 			}
-			log.Printf("Worker %d terminado\n", workerID)
+			log.Printf("Worker %d detenido\n", workerID)
 		}(i + 1)
 	}
 
-	// Configurar interceptor para el servidor gRPC
 	unaryInterceptor := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		var result interface{}
 		var err error
 		done := make(chan struct{})
 
-		// Enviar trabajo al pool
 		workChan <- func() {
 			result, err = handler(ctx, req)
 			close(done)
@@ -67,21 +75,21 @@ func main() {
 
 	grpcServer := grpc.NewServer(
 		grpc.UnaryInterceptor(unaryInterceptor),
-		grpc.MaxRecvMsgSize(20*1024*1024), // aumenta límite a 20MB
-		grpc.MaxSendMsgSize(20*1024*1024), // aumenta límite a 20MB
+		grpc.MaxRecvMsgSize(20*1024*1024),
+		grpc.MaxSendMsgSize(20*1024*1024),
 	)
 
 	fileSystemServer := server.NewServer()
 	pb.RegisterFileSystemServiceServer(grpcServer, fileSystemServer)
 
-	lis, err := net.Listen("tcp", "127.0.0.1:"+port)
+	address := ip + ":" + port
+	lis, err := net.Listen("tcp", address)
 	if err != nil {
-		log.Fatalf("Error al escuchar en el puerto %s: %v", port, err)
+		log.Fatalf("Error al escuchar en %s: %v", address, err)
 	}
 
-	log.Printf("Servidor gRPC corriendo en el puerto %s...\n", port)
+	log.Printf("Servidor gRPC corriendo en %s\n", address)
 
-	// Iniciar el servidor y registrar conexiones
 	go func() {
 		for {
 			conn, err := lis.Accept()
@@ -103,18 +111,16 @@ func main() {
 	waitForShutdown(grpcServer, workChan, &wg)
 }
 
-// Para apagar el sv
 func waitForShutdown(grpcServer *grpc.Server, workChan chan func(), wg *sync.WaitGroup) {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
 
-	log.Println("Recibida señal de apagado, cerrando servidor...")
+	log.Println("Señal de apagado recibida, cerrando servidor...")
 
 	close(workChan)
 	wg.Wait()
 
-	// Detener el servidor gRPC
 	grpcServer.GracefulStop()
 	log.Println("Servidor detenido correctamente")
 }
