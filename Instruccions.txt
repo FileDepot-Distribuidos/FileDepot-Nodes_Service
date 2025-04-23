@@ -1,0 +1,21 @@
+Primero toca instalar el protoc, buscarlo por github
+Luego, se añade al path del equipo
+
+Luego se crea el proyecto y todos sus folder y archivos, importante tener misma organización
+Se busca el codigo para gestionar las dependencias de go.mod y se instalan plugin del go
+
+go mod tidy
+go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+go get github.com/joho/godotenv
+
+
+
+por ultimo se hace el siguiente codigo
+protoc -I=proto --go_out=. --go-grpc_out=. proto/fileSystem.proto
+Esto, para que funcione la interfaz grpc
+
+
+CORRER SERVER
+go run grpcServer/gRPCserver.go
+go get github.com/joho/godotenv
