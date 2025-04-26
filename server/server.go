@@ -143,7 +143,7 @@ func (s *Server) UploadFile(ctx context.Context, req *pb.UploadRequest) (*pb.Res
 func (s *Server) MoveFile(ctx context.Context, req *pb.MoveRequest) (*pb.Response, error) {
 	log.Printf("Datos recibidos:\nSourcePath: %s\nDestinationPath: %s", req.SourcePath, req.DestinationPath)
 	sourcePath := filepath.Join(rootDirectory, req.SourcePath)
-	destPath := filepath.Join(rootDirectory, req.DestinationPath, filepath.Base(sourcePath))
+	destPath := filepath.Join(rootDirectory, req.DestinationPath)
 
 	if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
 		return nil, status.Errorf(codes.NotFound, "El archivo fuente no existe")
