@@ -141,6 +141,7 @@ func (s *Server) UploadFile(ctx context.Context, req *pb.UploadRequest) (*pb.Res
 
 // Mover un archivo
 func (s *Server) MoveFile(ctx context.Context, req *pb.MoveRequest) (*pb.Response, error) {
+	log.Printf("Datos recibidos:\nSourcePath: %s\nDestinationPath: %s", req.SourcePath, req.DestinationPath)
 	sourcePath := filepath.Join(rootDirectory, req.SourcePath)
 	destPath := filepath.Join(rootDirectory, req.DestinationPath)
 
